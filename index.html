@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MoneyMap — Personal Finance</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script defer src="script.js"></script>
+</head>
+<body>
+  <section id="cloud-auth-screen" class="cloud-auth-screen hidden" aria-labelledby="cloud-auth-title">
+    <div class="cloud-auth-card">
+      <div class="cloud-brand-mark">↗</div>
+      <p class="eyebrow">PRIVATE PERSONAL FINANCE</p>
+      <h1 id="cloud-auth-title">Your MoneyMap</h1>
+      <p class="cloud-auth-copy">Sign in to securely sync your financial data across your devices.</p>
+      <div id="cloud-setup-notice" class="cloud-notice hidden"></div>
+      <form id="cloud-signin-form" class="cloud-auth-form">
+        <label>Email address<input id="cloud-email" type="email" autocomplete="username" required placeholder="you@example.com"></label>
+        <label>Password<input id="cloud-password" type="password" autocomplete="current-password" required minlength="8" placeholder="Your password"></label>
+        <button id="cloud-signin-button" class="primary-button" type="submit">Sign in</button>
+      </form>
+      <form id="cloud-new-password-form" class="cloud-auth-form hidden">
+        <label>New password<input id="cloud-new-password" type="password" autocomplete="new-password" required minlength="12" placeholder="Use at least 12 characters"></label>
+        <label>Confirm new password<input id="cloud-confirm-password" type="password" autocomplete="new-password" required minlength="12" placeholder="Re-enter new password"></label>
+        <button id="cloud-update-password-button" class="primary-button" type="submit">Update password</button>
+      </form>
+      <button id="cloud-reset-password" class="text-button cloud-reset-button" type="button">Forgot password?</button>
+      <p id="cloud-auth-message" class="cloud-auth-message" role="status" aria-live="polite"></p>
+      <p class="cloud-auth-footnote">Account creation is disabled in this app. Create your one private user through the Supabase dashboard.</p>
+    </div>
+  </section>
+  <div id="cloud-sync-status" class="cloud-sync-status hidden" role="status" aria-live="polite">Cloud sync ready</div>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="MoneyMap home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5 9 11l3.2 3.2L20 6.5"/><path d="M14.5 6.5H20v5.5"/></svg></span>
+        <span>money<span class="brand-light">map</span></span>
+      </a>
+      <div class="side-label">WORKSPACE</div>
+      <nav class="nav-list">
+        <button class="nav-item active" data-view="overview"><span>▦</span> Overview</button>
+        <button class="nav-item" data-view="transactions"><span>↔</span> Transactions</button>
+        <button class="nav-item" data-view="budgets"><span>◉</span> Budgets</button>
+        <button class="nav-item" data-view="reports"><span>▥</span> Reports</button>
+        <button class="nav-item" data-view="recurring"><span>⟳</span> Recurring</button>
+        <button class="nav-item" data-view="goals"><span>◎</span> Savings goals</button>
+        <button class="nav-item" data-view="backup"><span>⇧</span> Backup & restore</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="help-card">
+          <div class="help-icon">✦</div>
+          <strong>Small steps add up.</strong>
+          <p>Keep an eye on your spending and make your goals happen.</p>
+        </div>
+        <div class="profile">
+          <div class="avatar">MM</div>
+          <div><strong>My finances</strong><small>Personal workspace</small></div>
+          <span class="dots">•••</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="mobile-brand"><span class="brand-mark">↗</span> moneymap</div>
+        <div class="breadcrumb">Workspace <span>/</span> <strong id="page-name">Overview</strong></div>
+        <div class="top-actions">
+          <label class="month-picker"><span>Period</span><input type="month" id="month-picker"></label>
+          <button class="icon-button" id="theme-toggle" title="Toggle dark mode" aria-label="Toggle dark mode">☼</button>
+          <button class="outline-button hidden" id="cloud-account-button" type="button">Account</button>
+          <button class="primary-button" id="open-add"><span>＋</span> Add transaction</button>
+        </div>
+      </header>
+
+      <section class="page-heading">
+        <div><p class="eyebrow" id="today-label">YOUR FINANCIAL SNAPSHOT</p><h1 id="greeting">Good afternoon 👋</h1><p class="subheading">Here's what's happening with your money.</p></div>
+        <div class="heading-note"><span class="note-dot"></span> Private cloud sync</div>
+      </section>
+
+      <section class="view active" id="view-overview">
+        <div class="stats-grid">
+          <article class="stat-card balance-card">
+            <div class="stat-top"><span>Available balance</span><span class="stat-icon green">↗</span></div>
+            <div class="stat-value" id="stat-balance">$0.00</div>
+            <div class="stat-foot"><span class="pill positive" id="balance-caption">This month</span><span class="muted">Income minus expenses</span></div>
+            <div class="sparkline"><svg viewBox="0 0 240 38" preserveAspectRatio="none"><path d="M0 29 C20 26 23 8 43 16 S70 31 89 20 S114 8 134 18 S164 27 181 13 S211 7 240 3" /></svg></div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-top"><span>Total income</span><span class="stat-icon blue">↙</span></div>
+            <div class="stat-value" id="stat-income">$0.00</div>
+            <div class="stat-foot"><span class="muted">Money coming in</span><span class="stat-mini blue-mini">Income</span></div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-top"><span>Total expenses</span><span class="stat-icon coral">↗</span></div>
+            <div class="stat-value" id="stat-expenses">$0.00</div>
+            <div class="stat-foot"><span class="muted">Money going out</span><span class="stat-mini coral-mini">Spending</span></div>
+          </article>
+          <article class="stat-card">
+            <div class="stat-top"><span>Savings rate</span><span class="stat-icon purple">◌</span></div>
+            <div class="stat-value" id="stat-savings">0%</div>
+            <div class="stat-foot"><span class="muted">Income saved this month</span><span class="stat-mini purple-mini">Savings</span></div>
+          </article>
+        </div>
+
+        <div class="dashboard-grid">
+          <article class="panel spending-panel">
+            <div class="panel-header"><div><h2>Spending overview</h2><p>Where your money went this month</p></div><span class="soft-tag" id="spend-month-label">This month</span></div>
+            <div class="chart-wrap"><canvas id="spending-chart" aria-label="Spending by category chart"></canvas><div class="chart-center"><span>Total spent</span><strong id="chart-total">$0</strong></div></div>
+            <div id="category-legend" class="category-legend"></div>
+          </article>
+          <article class="panel budget-panel">
+            <div class="panel-header"><div><h2>Monthly budget</h2><p>Stay on track with your goals</p></div><button class="text-button" data-view-link="budgets">Manage ↗</button></div>
+            <div class="budget-total"><strong id="budget-used">$0</strong><span>of <span id="budget-limit-display">$2,500</span></span></div>
+            <div class="progress-track"><div class="progress-fill" id="overall-progress"></div></div>
+            <div class="budget-meta"><span id="budget-percent">0% used</span><span id="budget-left">$2,500 left</span></div>
+            <div class="divider"></div>
+            <div class="mini-budget-list" id="mini-budget-list"></div>
+            <button class="outline-button full-width" data-view-link="budgets">View budget details <span>→</span></button>
+          </article>
+        </div>
+
+        <article class="panel transactions-panel">
+          <div class="panel-header"><div><h2>Recent transactions</h2><p>Your latest money moves</p></div><button class="text-button" data-view-link="transactions">View all →</button></div>
+          <div class="table-scroll"><table><thead><tr><th>TRANSACTION</th><th>CATEGORY</th><th>DATE</th><th>AMOUNT</th></tr></thead><tbody id="recent-rows"></tbody></table></div>
+          <div class="empty-state hidden" id="recent-empty">No transactions yet. Add your first transaction to get started.</div>
+        </article>
+      </section>
+
+      <section class="view" id="view-transactions">
+        <div class="section-toolbar"><div><h2>All transactions</h2><p>Keep track of every dollar.</p></div><div class="toolbar-controls"><input id="transaction-search" type="search" placeholder="Search transactions…"><select id="type-filter"><option value="all">All types</option><option value="expense">Expenses</option><option value="income">Income</option><option value="saving">Savings</option></select></div></div>
+        <article class="panel"><div class="table-scroll"><table><thead><tr><th>TRANSACTION</th><th>CATEGORY</th><th>DATE</th><th>TYPE</th><th>AMOUNT</th><th></th></tr></thead><tbody id="all-rows"></tbody></table></div><div class="empty-state hidden" id="all-empty">Nothing here yet. Add a transaction to see it listed.</div></article>
+        <div class="export-row"><button class="outline-button" id="export-csv">↓ Export CSV</button></div>
+      </section>
+
+      <section class="view" id="view-budgets">
+        <div class="section-toolbar"><div><h2>Budget planner</h2><p>Give every dollar a purpose.</p></div></div>
+        <div class="budget-page-grid">
+          <article class="panel"><div class="panel-header"><div><h2>Monthly spending limit</h2><p>Your overall monthly target</p></div></div><form id="overall-budget-form" class="inline-form"><label for="overall-budget-input">Budget amount ($)</label><div class="inline-input"><input id="overall-budget-input" type="number" min="0" step="0.01" required><button class="primary-button">Save budget</button></div></form></article>
+          <article class="panel"><div class="panel-header"><div><h2>Category budgets</h2><p>Set limits for your biggest spending areas</p></div></div><form id="category-budget-form" class="stack-form"><label>Category<select id="budget-category"><option>Food & dining</option><option>Housing</option><option>Transportation</option><option>Shopping</option><option>Bills & utilities</option><option>Health</option><option>Entertainment</option><option>Other</option></select></label><label>Monthly limit ($)<input id="category-budget-input" type="number" min="0" step="0.01" required placeholder="e.g. 350"></label><button class="primary-button">Add / update category</button></form></article>
+        </div>
+        <article class="panel"><div class="panel-header"><div><h2>Budget breakdown</h2><p>Actual spending compared with your limits</p></div></div><div id="budget-breakdown" class="budget-breakdown"></div></article>
+      </section>
+
+      <section class="view" id="view-reports">
+        <div class="section-toolbar"><div><h2>Reports & insights</h2><p>Understand your habits over time.</p></div><button class="outline-button" id="export-report">↓ Export report CSV</button></div>
+        <article class="panel report-panel"><div class="panel-header"><div><h2>Income vs. expenses</h2><p>Monthly comparison for the six months ending in the selected month</p></div></div><div class="report-chart-wrap"><canvas id="monthly-chart"></canvas></div></article>
+        <div class="report-cards"><article class="panel"><span class="muted">Top spending category</span><h2 id="top-category">—</h2><p id="top-category-detail">Add expenses to see your top category.</p></article><article class="panel"><span class="muted">Average expense</span><h2 id="average-expense">$0.00</h2><p>Per expense transaction this month</p></article><article class="panel"><span class="muted">Savings this month</span><h2 id="report-savings">$0.00</h2><p>Transactions marked as savings</p></article></div>
+        <article class="panel"><div class="panel-header"><div><h2>Category spending</h2><p>Where your selected month's expenses went</p></div></div><div id="report-category-breakdown" class="budget-breakdown"></div></article>
+        <article class="panel"><div class="panel-header"><div><h2>Budget warnings</h2><p>Categories nearing or exceeding their monthly limits</p></div></div><div id="report-budget-warnings" class="budget-breakdown"></div></article>
+      </section>
+
+      <section class="view" id="view-recurring">
+        <div class="section-toolbar"><div><h2>Recurring payments</h2><p>Track subscriptions, bills, and regular income.</p></div><button class="primary-button" id="open-recurring">＋ Add recurring</button></div>
+        <article class="panel"><div class="panel-header"><div><h2>Your schedule</h2><p>Recurring items you've added</p></div></div><div id="recurring-list" class="recurring-list"></div><div id="recurring-empty" class="empty-state">No recurring items yet. Add rent, subscriptions, or a regular paycheck.</div></article>
+      </section>
+
+      <section class="view" id="view-backup">
+        <div class="section-toolbar"><div><h2>Backup & restore</h2><p>Keep a portable copy of your MoneyMap data.</p></div></div>
+        <div class="backup-grid">
+          <article class="panel"><div class="backup-icon">⇩</div><h2>Export a full backup</h2><p class="backup-copy">Download your transactions, budgets, recurring schedules, savings goals, and theme settings as a JSON file.</p><button class="primary-button" id="export-backup">↓ Download backup</button></article>
+          <article class="panel"><div class="backup-icon">⇧</div><h2>Restore from backup</h2><p class="backup-copy">Import a MoneyMap JSON backup. Restoring replaces the data currently saved in this browser.</p><label class="backup-file-label" for="backup-file">Choose backup file</label><input id="backup-file" type="file" accept="application/json,.json"><button class="outline-button" id="import-backup" disabled>Restore selected backup</button><p class="backup-warning">Important: export a fresh backup first. Restoring overwrites the current MoneyMap data.</p></article>
+        </div>
+        <article class="panel"><h2>Before you restore</h2><ul class="backup-checklist"><li>Use a JSON file exported by MoneyMap.</li><li>Check that it contains the data you expect.</li><li>Confirm the replacement when prompted.</li><li>Keep backup files somewhere safe; they may contain sensitive financial details.</li></ul></article>
+      </section>
+
+      <section class="view" id="view-goals">
+        <div class="section-toolbar"><div><h2>Savings goals</h2><p>Turn big plans into small, trackable steps.</p></div></div>
+        <article class="panel goal-create-panel"><div class="panel-header"><div><h2>Create a goal</h2><p>Set a target, optional deadline, and starting balance.</p></div></div>
+          <form id="goal-form" class="goal-form">
+            <label>Goal name<input id="goal-name" required maxlength="60" placeholder="e.g. Emergency fund"></label>
+            <div class="form-row"><label>Target amount ($)<input id="goal-target" type="number" min="0.01" step="0.01" required placeholder="5000.00"></label><label>Already saved ($)<input id="goal-current" type="number" min="0" step="0.01" value="0" placeholder="0.00"></label></div>
+            <label>Target date (optional)<input id="goal-deadline" type="date"></label>
+            <button class="primary-button" type="submit">＋ Create savings goal</button>
+          </form>
+        </article>
+        <div id="goals-summary" class="goals-summary"></div>
+        <div id="goals-list" class="goals-grid"></div>
+        <div id="goals-empty" class="panel empty-state">No savings goals yet. Create one above to start tracking progress.</div>
+      </section>
+
+      <footer class="footer"><span>© <span id="year"></span> MoneyMap</span><span>Built for a clearer view of your money <span class="footer-heart">♥</span></span></footer>
+    </main>
+  </div>
+
+  <dialog id="transaction-dialog" class="modal">
+    <form id="transaction-form" method="dialog">
+      <input id="editing-transaction-id" type="hidden" value="">
+      <div class="modal-header"><div><p class="eyebrow">MONEY IN MOTION</p><h2 id="transaction-dialog-title">Add transaction</h2><p id="transaction-dialog-subtitle">Record a little money detail.</p></div><button class="close-button" type="button" data-close="transaction-dialog" aria-label="Close">×</button></div>
+      <label>Description<input id="description" name="description" required maxlength="80" placeholder="e.g. Weekly groceries"></label>
+      <div class="form-row"><label>Amount ($)<input id="amount" name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></label><label>Type<select id="transaction-type" name="type"><option value="expense">Expense</option><option value="income">Income</option><option value="saving">Savings</option></select></label></div>
+      <div class="form-row"><label>Category<select id="category" name="category"><option>Food & dining</option><option>Housing</option><option>Transportation</option><option>Shopping</option><option>Bills & utilities</option><option>Health</option><option>Entertainment</option><option>Salary</option><option>Freelance</option><option>Savings</option><option>Other</option></select></label><label>Date<input id="date" name="date" type="date" required></label></div>
+      <label class="checkbox-row"><input id="is-recurring" type="checkbox"> <span>Repeat this transaction monthly</span></label>
+      <div class="modal-actions"><button class="outline-button" type="button" data-close="transaction-dialog">Cancel</button><button id="transaction-submit" class="primary-button">Save transaction</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="recurring-dialog" class="modal">
+    <form id="recurring-form" method="dialog">
+      <div class="modal-header"><div><p class="eyebrow">AUTOPILOT</p><h2>Add recurring item</h2><p>Keep regular bills and income on your radar.</p></div><button class="close-button" type="button" data-close="recurring-dialog" aria-label="Close">×</button></div>
+      <label>Description<input id="recurring-description" required maxlength="80" placeholder="e.g. Rent or streaming service"></label>
+      <div class="form-row"><label>Amount ($)<input id="recurring-amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></label><label>Type<select id="recurring-type"><option value="expense">Expense</option><option value="income">Income</option><option value="saving">Savings</option></select></label></div>
+      <div class="form-row"><label>Category<select id="recurring-category"><option>Housing</option><option>Bills & utilities</option><option>Food & dining</option><option>Transportation</option><option>Salary</option><option>Entertainment</option><option>Savings</option><option>Other</option></select></label><label>Frequency<select id="recurring-frequency"><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="yearly">Yearly</option></select></label></div>
+      <label>Next due date<input id="recurring-date" type="date" required></label>
+      <div class="modal-actions"><button class="outline-button" type="button" data-close="recurring-dialog">Cancel</button><button class="primary-button">Save recurring item</button></div>
+    </form>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
