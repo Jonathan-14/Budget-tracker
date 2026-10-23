@@ -241,7 +241,7 @@ function render() {
   $("#overall-budget-input").value=budgets.monthly;
   $("#greeting").textContent=`${new Date().getHours()<12?"Good morning":new Date().getHours()<18?"Good afternoon":"Good evening"} 👋`;
   $("#today-label").textContent=monthName(month).toUpperCase()+" FINANCIAL SNAPSHOT";
-  renderSpendingChart(list); renderMiniBudgets(list); renderRecent(list); renderAllTransactions(); renderBudgetBreakdown(list); renderReports(); renderRecurring(); renderGoals();
+  renderSpendingChart(list); renderMiniBudgets(list); renderRecent(list); populateTransactionCategoryFilter(); renderAllTransactions(); renderBudgetBreakdown(list); renderReports(); renderRecurring(); renderGoals();
 }
 
 function renderSpendingChart(list) {
@@ -271,11 +271,59 @@ function renderRecent(list) {
   $("#recent-rows").innerHTML=sorted.map(t=>rowMarkup(t)).join("");
   $("#recent-empty").classList.toggle("hidden",sorted.length>0);
 }
+function getFilteredTransactions() {
+  const query=$("#transaction-search").value.trim().toLocaleLowerCase();
+  const type=$("#type-filter").value;
+  const category=$("#category-filter").value;
+  const period=$("#transaction-period-filter").value;
+  const from=$("#transaction-date-from").value;
+  const to=$("#transaction-date-to").value;
+  const sort=$("#transaction-sort").value;
+  const filtered=transactions.filter(t=>{
+    const searchable=`${t.description||""} ${t.category||""}`.toLocaleLowerCase();
+    if(query&&!searchable.includes(query)) return false;
+    if(type!=="all"&&(t.type||"expense")!==type) return false;
+    if(category!=="all"&&t.category!==category) return false;
+    if(period==="month"&&!t.date?.startsWith(selectedMonth())) return false;
+    if(from&&(!t.date||t.date<from)) return false;
+    if(to&&(!t.date||t.date>to)) return false;
+    return true;
+  });
+  filtered.sort((a,b)=>{
+    if(sort==="oldest") return String(a.date||"").localeCompare(String(b.date||""));
+    if(sort==="amount-desc") return Number(b.amount||0)-Number(a.amount||0);
+    if(sort==="amount-asc") return Number(a.amount||0)-Number(b.amount||0);
+    if(sort==="description") return String(a.description||"").localeCompare(String(b.description||""));
+    return String(b.date||"").localeCompare(String(a.date||""));
+  });
+  return filtered;
+}
 function renderAllTransactions() {
-  const query=$("#transaction-search").value.toLowerCase(), type=$("#type-filter").value;
-  const filtered=[...transactions].filter(t=>(t.description+" "+t.category).toLowerCase().includes(query)&&(type==="all"||t.type===type)&&t.date?.startsWith(selectedMonth())).sort((a,b)=>b.date.localeCompare(a.date));
+  const filtered=getFilteredTransactions();
   $("#all-rows").innerHTML=filtered.map(t=>rowMarkup(t,true)).join("");
+  const hasAnyTransactions=transactions.length>0;
+  $("#all-empty").textContent=hasAnyTransactions?"No transactions match these filters. Try changing your search or resetting the filters.":"Nothing here yet. Add a transaction to see it listed.";
   $("#all-empty").classList.toggle("hidden",filtered.length>0);
+  $("#transaction-results-count").textContent=`${filtered.length} transaction${filtered.length===1?"":"s"} found`;
+  const total=filtered.reduce((n,t)=>n+(t.type==="income"?1:-1)*Number(t.amount||0),0);
+  $("#transaction-results-total").textContent=`Net total: ${money(total)}`;
+  $("#export-csv").disabled=filtered.length===0;
+}
+function populateTransactionCategoryFilter() {
+  const select=$("#category-filter"), current=select.value;
+  const categories=[...new Set([...CATEGORIES,...transactions.map(t=>t.category).filter(Boolean)])].sort((a,b)=>a.localeCompare(b));
+  select.innerHTML='<option value="all">All categories</option>'+categories.map(category=>`<option value="${safe(category)}">${safe(category)}</option>`).join("");
+  select.value=categories.includes(current)?current:"all";
+}
+function resetTransactionFilters() {
+  $("#transaction-search").value="";
+  $("#type-filter").value="all";
+  $("#category-filter").value="all";
+  $("#transaction-period-filter").value="month";
+  $("#transaction-date-from").value="";
+  $("#transaction-date-to").value="";
+  $("#transaction-sort").value="newest";
+  renderAllTransactions();
 }
 function renderBudgetBreakdown(list) {
   const spent=getSpending(list), keys=Object.keys(categoryBudgets);
@@ -284,26 +332,121 @@ function renderBudgetBreakdown(list) {
     return `<div class="budget-break-row"><div class="budget-break-top"><span class="legend-dot" style="background:${color}"></span><span>${safe(name)}</span><strong>${money(amount)} / ${money(limit)}</strong></div><div class="progress-track"><div class="progress-fill" style="width:${Math.min(100,pct*100)}%;background:${color}"></div></div><div class="budget-break-foot"><span>${Math.round(pct*100)}% used</span><span>${amount>limit?money(amount-limit)+" over":money(limit-amount)+" remaining"}</span></div></div>`;
   }).join(""):`<div class="empty-state">No category budgets yet. Add one above to start planning.</div>`;
 }
+function renderFinancialInsights(list, yearly, year, month, totals, categoryData) {
+  const { income, expenses, savings, net } = totals;
+  const previousKey = yearly ? String(year - 1) : (() => {
+    const [y, m] = month.split("-").map(Number);
+    const d = new Date(y, m - 2, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  })();
+  const previousList = yearly
+    ? transactions.filter(t => t.date?.startsWith(previousKey + "-"))
+    : monthTransactions(previousKey);
+  const previousExpenses = sum(previousList, "expense");
+  const previousIncome = sum(previousList, "income");
+  const periodLabel = yearly ? String(year) : monthName(month);
+  const previousLabel = yearly ? String(year - 1) : monthName(previousKey);
+  const insights = [];
+  const addInsight = (kind, title, detail) => insights.push({ kind, title, detail });
+
+  if (!list.length) {
+    addInsight("neutral", "Ready when you are", `Record transactions for ${periodLabel} to see spending patterns and budget guidance.`);
+  } else {
+    if (previousExpenses > 0) {
+      const change = ((expenses - previousExpenses) / previousExpenses) * 100;
+      const rounded = Math.round(Math.abs(change));
+      if (Math.abs(change) >= 5) {
+        addInsight(change > 0 ? "warning" : "positive", change > 0 ? "Spending increased" : "Spending decreased", `Expenses are ${rounded}% ${change > 0 ? "higher" : "lower"} than ${previousLabel} (${money(expenses)} vs. ${money(previousExpenses)}).`);
+      } else {
+        addInsight("positive", "Spending is steady", `Expenses are within 5% of ${previousLabel}.`);
+      }
+    } else {
+      addInsight("neutral", "Build your trend history", `Once ${previousLabel} has recorded expenses, MoneyMap can compare periods for you.`);
+    }
+
+    const top = Object.entries(categoryData).sort((a, b) => b[1] - a[1])[0];
+    if (top && expenses > 0) {
+      addInsight("neutral", "Biggest spending category", `${top[0]} accounts for ${Math.round((top[1] / expenses) * 100)}% of your expenses (${money(top[1])}).`);
+    }
+    if (income > 0) {
+      const rate = Math.round((savings / income) * 100);
+      addInsight(rate >= 20 ? "positive" : rate > 0 ? "neutral" : "warning", "Savings rate", `${rate}% of recorded income was marked as savings in ${periodLabel}.`);
+    }
+    if (net < 0) {
+      addInsight("warning", "Outflow exceeded income", `Recorded expenses and savings were ${money(Math.abs(net))} more than income in ${periodLabel}.`);
+    } else if (income > 0) {
+      addInsight("positive", "Positive cash flow", `${money(net)} remains after recorded expenses and savings for ${periodLabel}.`);
+    }
+
+    const overallLimit = (Number(budgets.monthly) || 0) * (yearly ? 12 : 1);
+    if (overallLimit > 0) {
+      const pct = expenses / overallLimit;
+      if (pct >= 1) addInsight("warning", "Overall budget exceeded", `Spending is ${Math.round((pct - 1) * 100)}% over your ${yearly ? "annualized" : "monthly"} overall budget.`);
+      else if (pct >= 0.8) addInsight("warning", "Overall budget nearly used", `${Math.round(pct * 100)}% of your ${yearly ? "annualized" : "monthly"} overall budget has been used.`);
+    }
+    Object.entries(categoryBudgets).forEach(([name, limit]) => {
+      const target = (Number(limit) || 0) * (yearly ? 12 : 1);
+      const amount = categoryData[name] || 0;
+      if (target > 0 && amount / target >= 0.8) {
+        const pct = Math.round((amount / target) * 100);
+        addInsight("warning", `${name} budget alert`, `${pct}% used (${money(amount)} of ${money(target)}). ${pct >= 100 ? "Consider reviewing this category's spending." : "You're approaching the limit."}`);
+      }
+    });
+  }
+
+  $("#financial-insights-description").textContent = `Automated observations for ${periodLabel}. Based on recorded data, not financial advice.`;
+  $("#financial-insights").innerHTML = insights.map(item => `<div class="insight-item insight-${item.kind}"><span class="insight-icon" aria-hidden="true">${item.kind === "warning" ? "!" : item.kind === "positive" ? "✓" : "↗"}</span><div><strong>${safe(item.title)}</strong><p>${safe(item.detail)}</p></div></div>`).join("");
+}
+
 function renderReports() {
-  const month=selectedMonth(), list=monthTransactions(month), expenses=list.filter(t=>t.type==="expense"), data=getSpending(list);
+  const month=selectedMonth(), [year,mo]=month.split("-").map(Number);
+  const period=$("#report-period")?.value || "monthly";
+  const yearly=period==="yearly";
+  const startKey=yearly?`${year}-01` : month;
+  const list=yearly?transactions.filter(t=>t.date?.startsWith(String(year)+"-")):monthTransactions(month);
+  const expenses=list.filter(t=>t.type==="expense"), data=getSpending(list);
+  const totalIncome=sum(list,"income"), totalExpenses=sum(list,"expense"), totalSavings=sum(list,"saving");
+  const net=totalIncome-totalExpenses-totalSavings;
+  renderFinancialInsights(list, yearly, year, month, { income: totalIncome, expenses: totalExpenses, savings: totalSavings, net }, data);
   const top=Object.entries(data).sort((a,b)=>b[1]-a[1])[0];
+  $("#report-income-label").textContent=yearly?`Income in ${year}`:"Income this month";
+  $("#report-expenses-label").textContent=yearly?`Expenses in ${year}`:"Expenses this month";
+  $("#report-net-label").textContent=yearly?`Net for ${year}`:"Net after expenses & savings";
+  $("#report-income").textContent=money(totalIncome);
+  $("#report-expenses").textContent=money(totalExpenses);
+  $("#report-net").textContent=money(net);
+  $("#report-net").style.color=net<0?"#d96f61":"";
   $("#top-category").textContent=top?top[0]:"—";
-  $("#top-category-detail").textContent=top?`${money(top[1])} spent in ${top[0].toLowerCase()}`:"Add expenses to see your top category.";
-  $("#average-expense").textContent=money(expenses.length?sum(list,"expense")/expenses.length:0);
-  $("#report-savings").textContent=money(sum(list,"saving"));
+  $("#top-category-detail").textContent=top?`${money(top[1])} spent in ${top[0].toLowerCase()}${yearly?` in ${year}`:""}`:"Add expenses to see your top category.";
+  $("#average-expense").textContent=money(expenses.length?totalExpenses/expenses.length:0);
+  $("#average-expense-detail").textContent=yearly?`Across ${expenses.length} expense transaction${expenses.length===1?"":"s"} in ${year}`:"Per expense transaction this month";
+  $("#report-savings-label").textContent=yearly?`Savings in ${year}`:"Savings this month";
+  $("#report-savings").textContent=money(totalSavings);
+
   const labels=[], incomes=[], outgoings=[];
-  const [year,mo]=month.split("-").map(Number);
-  for(let offset=5;offset>=0;offset--){const d=new Date(year,mo-1-offset,1), key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;labels.push(d.toLocaleDateString("en-US",{month:"short"}));const arr=monthTransactions(key);incomes.push(sum(arr,"income"));outgoings.push(sum(arr,"expense"));}
+  const count=yearly?12:6;
+  for(let offset=count-1;offset>=0;offset--){
+    const d=yearly?new Date(year,11-offset,1):new Date(year,mo-1-offset,1);
+    const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+    labels.push(yearly?d.toLocaleDateString("en-US",{month:"short"}):d.toLocaleDateString("en-US",{month:"short",year:"2-digit"}));
+    const arr=monthTransactions(key); incomes.push(sum(arr,"income")); outgoings.push(sum(arr,"expense"));
+  }
+  $("#report-chart-description").textContent=yearly?`Month-by-month income and expenses for ${year}`:`Monthly comparison for the six months ending in ${monthName(month)}`;
   const categoryEntries=Object.entries(data).sort((a,b)=>b[1]-a[1]);
   $("#report-category-breakdown").innerHTML=categoryEntries.length?categoryEntries.map(([name,amount])=>{
-    const total=sum(list,"expense"),pct=total?amount/total:0;
-    return `<div class="budget-break-row"><div class="budget-break-top"><span class="legend-dot" style="background:${COLORS[CATEGORIES.indexOf(name)%COLORS.length]}"></span><span>${safe(name)}</span><strong>${money(amount)}</strong></div><div class="progress-track"><div class="progress-fill" style="width:${Math.min(100,pct*100)}%;background:${COLORS[CATEGORIES.indexOf(name)%COLORS.length]}"></div></div><div class="budget-break-foot"><span>${Math.round(pct*100)}% of expenses</span><span>${money(total?amount:0)}</span></div></div>`;
-  }).join(""):`<div class="empty-state">No expenses recorded for ${safe(monthName(month))}.</div>`;
+    const pct=totalExpenses?amount/totalExpenses:0;
+    return `<div class="budget-break-row"><div class="budget-break-top"><span class="legend-dot" style="background:${COLORS[CATEGORIES.indexOf(name)%COLORS.length]}"></span><span>${safe(name)}</span><strong>${money(amount)}</strong></div><div class="progress-track"><div class="progress-fill" style="width:${Math.min(100,pct*100)}%;background:${COLORS[CATEGORIES.indexOf(name)%COLORS.length]}"></div></div><div class="budget-break-foot"><span>${Math.round(pct*100)}% of expenses</span><span>${money(amount)}</span></div></div>`;
+  }).join(""):`<div class="empty-state">No expenses recorded for ${yearly?year:safe(monthName(month))}.</div>`;
   const warningRows=[];
-  const totalExpenses=sum(list,"expense"),overallPct=budgets.monthly>0?totalExpenses/budgets.monthly:0;
-  if(budgets.monthly>0&&overallPct>=.8)warningRows.push(`<div class="budget-break-row"><div class="budget-break-top"><span class="legend-dot" style="background:${overallPct>1?"#e97968":"#e8b84d"}"></span><span>Overall monthly budget</span><strong>${Math.round(overallPct*100)}% used</strong></div><div class="budget-break-foot"><span>${overallPct>1?"Over budget by":"Remaining"}</span><span>${money(Math.abs(budgets.monthly-totalExpenses))}</span></div></div>`);
-  Object.entries(categoryBudgets).forEach(([name,limit])=>{const amount=data[name]||0,pct=Number(limit)>0?amount/Number(limit):0;if(pct>=.8)warningRows.push(`<div class="budget-break-row"><div class="budget-break-top"><span class="legend-dot" style="background:${pct>1?"#e97968":"#e8b84d"}"></span><span>${safe(name)}</span><strong>${Math.round(pct*100)}% used</strong></div><div class="budget-break-foot"><span>${pct>1?"Over budget by":"Remaining"}</span><span>${money(Math.abs(Number(limit)-amount))}</span></div></div>`);});
-  $("#report-budget-warnings").innerHTML=warningRows.length?warningRows.join(""):`<div class="empty-state">You're below 80% of your tracked budgets for ${safe(monthName(month))}. Keep it up!</div>`;
+  const overallLimit=Number(budgets.monthly)||0;
+  const overallTarget=yearly?overallLimit*12:overallLimit;
+  const overallPct=overallTarget>0?totalExpenses/overallTarget:0;
+  if(overallTarget>0&&overallPct>=.8)warningRows.push(`<div class="budget-break-row"><div class="budget-break-top"><span class="legend-dot" style="background:${overallPct>1?"#e97968":"#e8b84d"}"></span><span>${yearly?"Annualized overall budget":"Overall monthly budget"}</span><strong>${Math.round(overallPct*100)}% used</strong></div><div class="budget-break-foot"><span>${overallPct>1?"Over budget by":"Remaining"}</span><span>${money(Math.abs(overallTarget-totalExpenses))}</span></div></div>`);
+  Object.entries(categoryBudgets).forEach(([name,limit])=>{
+    const target=(Number(limit)||0)*(yearly?12:1), amount=data[name]||0, pct=target>0?amount/target:0;
+    if(pct>=.8)warningRows.push(`<div class="budget-break-row"><div class="budget-break-top"><span class="legend-dot" style="background:${pct>1?"#e97968":"#e8b84d"}"></span><span>${safe(name)}</span><strong>${Math.round(pct*100)}% used</strong></div><div class="budget-break-foot"><span>${pct>1?"Over budget by":"Remaining"}</span><span>${money(Math.abs(target-amount))}</span></div></div>`);
+  });
+  $("#report-budget-warnings").innerHTML=warningRows.length?warningRows.join(""):`<div class="empty-state">You're below 80% of your tracked ${yearly?"annualized budgets":"budgets"} for ${yearly?year:safe(monthName(month))}. Keep it up!</div>`;
   if(monthlyChart)monthlyChart.destroy();
   monthlyChart=new Chart($("#monthly-chart").getContext("2d"),{type:"bar",data:{labels,datasets:[{label:"Income",data:incomes,backgroundColor:"#16845a",borderRadius:5,barPercentage:.55},{label:"Expenses",data:outgoings,backgroundColor:"#f0a092",borderRadius:5,barPercentage:.55}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{usePointStyle:true,boxWidth:7,boxHeight:7,padding:22,font:{family:"DM Sans",size:11}}}},scales:{x:{grid:{display:false},ticks:{color:"#8b9690",font:{family:"DM Sans",size:10}},border:{display:false}},y:{beginAtZero:true,grid:{color:"#eef2ef"},ticks:{color:"#8b9690",font:{family:"DM Sans",size:10},callback:v=>"$"+v.toLocaleString()},border:{display:false}}}}});
 }
@@ -503,15 +646,20 @@ async function importBackup() {
 }
 
 function exportCSV() {
-  const rows=[["Description","Amount","Type","Category","Date","Recurring"],...transactions.filter(t=>t.date?.startsWith(selectedMonth())).map(t=>[t.description,t.amount,t.type,t.category,t.date,t.recurring?"Yes":"No"])];
+  const filtered=getFilteredTransactions();
+  if(!filtered.length){notify("There are no transactions to export.");return;}
+  const rows=[["Description","Amount","Type","Category","Date","Recurring"],...filtered.map(t=>[t.description,t.amount,t.type,t.category,t.date,t.recurring?"Yes":"No"])];
   const csv=rows.map(row=>row.map(value=>`"${String(value??"").replace(/"/g,'""')}"`).join(",")).join("\r\n");
-  const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8;"})), a=document.createElement("a");a.href=url;a.download=`moneymap-${selectedMonth()}.csv`;a.click();URL.revokeObjectURL(url);notify("CSV exported.");
+  const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8;"})), a=document.createElement("a");a.href=url;a.download=`moneymap-transactions-${$("#transaction-period-filter").value==="month"?selectedMonth():"all-dates"}.csv`;a.click();URL.revokeObjectURL(url);notify(`${filtered.length} filtered transaction${filtered.length===1?"":"s"} exported.`);
 }
 function exportReportCSV() {
-  const month=selectedMonth(), list=monthTransactions(month), rows=[["MoneyMap Monthly Report",month],["Type","Description","Category","Date","Amount"],...list.map(t=>[t.type,t.description,t.category,t.date,Number(t.amount||0)])];
+  const month=selectedMonth(), [year]=month.split("-").map(Number), yearly=$("#report-period")?.value==="yearly";
+  const period=yearly?String(year):month;
+  const list=yearly?transactions.filter(t=>t.date?.startsWith(String(year)+"-")):monthTransactions(month);
+  const rows=[[yearly?"MoneyMap Annual Report":"MoneyMap Monthly Report",period],["Type","Description","Category","Date","Amount"],...list.map(t=>[t.type,t.description,t.category,t.date,Number(t.amount||0)])];
   rows.push([], ["Summary","Amount"],["Income",sum(list,"income")],["Expenses",sum(list,"expense")],["Savings",sum(list,"saving")],["Net after expenses and savings",sum(list,"income")-sum(list,"expense")-sum(list,"saving")]);
   const csv=rows.map(row=>row.map(value=>`"${String(value??"").replace(/"/g,'""')}"`).join(",")).join("\r\n");
-  const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8;"})),a=document.createElement("a");a.href=url;a.download=`moneymap-report-${month}.csv`;a.click();URL.revokeObjectURL(url);notify("Monthly report exported.");
+  const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8;"})),a=document.createElement("a");a.href=url;a.download=`moneymap-report-${period}.csv`;a.click();URL.revokeObjectURL(url);notify(`${yearly?"Annual":"Monthly"} report exported.`);
 }
 function setView(view) {
   const target = document.getElementById(`view-${view}`) ? view : "overview";
@@ -568,8 +716,10 @@ $("#transaction-form").addEventListener("submit",addTransaction);
 $("#recurring-form").addEventListener("submit",addRecurring);
 $("#goal-form").addEventListener("submit",addGoal);
 $("#month-picker").addEventListener("change",()=>{render();});
+$("#report-period").addEventListener("change",()=>renderReports());
 $("#transaction-search").addEventListener("input",renderAllTransactions);
-$("#type-filter").addEventListener("change",renderAllTransactions);
+["#type-filter","#category-filter","#transaction-period-filter","#transaction-date-from","#transaction-date-to","#transaction-sort"].forEach(selector=>$(selector).addEventListener("change",renderAllTransactions));
+$("#reset-transaction-filters").addEventListener("click",resetTransactionFilters);
 $("#export-csv").addEventListener("click",exportCSV);
 $("#export-report").addEventListener("click",exportReportCSV);
 $("#export-backup").addEventListener("click",exportBackup);
