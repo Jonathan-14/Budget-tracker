@@ -514,16 +514,53 @@ function exportReportCSV() {
   const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8;"})),a=document.createElement("a");a.href=url;a.download=`moneymap-report-${month}.csv`;a.click();URL.revokeObjectURL(url);notify("Monthly report exported.");
 }
 function setView(view) {
-  $$(".view").forEach(el=>el.classList.toggle("active",el.id===`view-${view}`));
-  $$(".nav-item").forEach(el=>el.classList.toggle("active",el.dataset.view===view));
+  const target = document.getElementById(`view-${view}`) ? view : "overview";
+  $$(".view").forEach(el=>el.classList.toggle("active",el.id===`view-${target}`));
+  $$(".nav-item").forEach(el=>el.classList.toggle("active",el.dataset.view===target));
   const names={overview:"Overview",transactions:"Transactions",budgets:"Budgets",reports:"Reports",recurring:"Recurring",goals:"Savings goals",backup:"Backup & restore"};
-  $("#page-name").textContent=names[view]||"Overview";
-  if(view==="reports")renderReports();
+  $("#page-name").textContent=names[target]||"Overview";
+  if(target==="reports")renderReports();
+  closeMobileNavigation();
 }
+
+function closeMobileNavigation() {
+  const sidebar=$("#app-sidebar"), toggle=$("#mobile-menu-toggle"), backdrop=$("#sidebar-backdrop");
+  if (sidebar) {
+    sidebar.classList.remove("mobile-open");
+    sidebar.style.transform = "";
+  }
+  if (backdrop) {
+    backdrop.classList.remove("is-visible");
+    backdrop.style.display = "none";
+  }
+  toggle?.setAttribute("aria-expanded","false");
+  toggle?.setAttribute("aria-label","Open navigation menu");
+}
+function toggleMobileNavigation() {
+  const sidebar=$("#app-sidebar"), toggle=$("#mobile-menu-toggle"), backdrop=$("#sidebar-backdrop");
+  if (!sidebar) return;
+  const isOpen = !sidebar.classList.contains("mobile-open");
+  sidebar.classList.toggle("mobile-open", isOpen);
+  sidebar.style.display = isOpen ? "flex" : "";
+  sidebar.style.transform = isOpen ? "translateX(0)" : "";
+  if (backdrop) {
+    backdrop.classList.toggle("is-visible", isOpen);
+    backdrop.style.display = isOpen ? "block" : "none";
+  }
+  toggle?.setAttribute("aria-expanded",String(isOpen));
+  toggle?.setAttribute("aria-label",isOpen?"Close navigation menu":"Open navigation menu");
+}
+window.toggleMobileNavigation = toggleMobileNavigation;
+window.closeMobileNavigation = closeMobileNavigation;
 
 $("#month-picker").value=monthNow();$("#date").value=localDate();$("#recurring-date").value=localDate();$("#year").textContent=new Date().getFullYear();
 $$(".nav-item").forEach(button=>button.addEventListener("click",()=>setView(button.dataset.view)));
-$$("[data-view-link]").forEach(button=>button.addEventListener("click",()=>setView(button.dataset.viewLink)));
+$$("[data-view-link]").forEach(button=>button.addEventListener("click",event=>{event.preventDefault();setView(button.dataset.viewLink);}));
+$("#mobile-menu-toggle")?.addEventListener("click",toggleMobileNavigation);
+$("#sidebar-backdrop")?.addEventListener("click",closeMobileNavigation);
+$("#mobile-home")?.addEventListener("click",()=>setView("overview"));
+document.addEventListener("keydown",event=>{if(event.key==="Escape")closeMobileNavigation();});
+window.addEventListener("resize",()=>{if(window.innerWidth>760)closeMobileNavigation();});
 $("#open-add").addEventListener("click",()=>{resetTransactionDialog();openDialog("transaction-dialog");});
 $("#open-recurring").addEventListener("click",()=>openDialog("recurring-dialog"));
 $$("[data-close]").forEach(button=>button.addEventListener("click",()=>closeDialog(button.dataset.close)));

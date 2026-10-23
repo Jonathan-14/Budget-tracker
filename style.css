@@ -1664,7 +1664,9 @@ body.dark .cloud-auth-footnote {
     box-shadow: 12px 0 35px #10221920;
   }
   .sidebar.mobile-open {
-    transform: translateX(0);
+    display: flex !important;
+    transform: translateX(0) !important;
+    visibility: visible !important;
   }
   .sidebar .side-label {
     margin-top: 32px;
