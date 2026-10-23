@@ -128,6 +128,21 @@
           </article>
         </div>
 
+        <div class="dashboard-grid forecast-grid">
+          <article class="panel upcoming-panel">
+            <div class="panel-header"><div><h2>Upcoming payments</h2><p>Recurring items due in the next 30 days</p></div><button class="text-button" data-view-link="recurring">Manage ↗</button></div>
+            <div id="upcoming-payments" class="upcoming-list"></div>
+            <div id="upcoming-empty" class="empty-state hidden">No recurring payments or income due in the next 30 days.</div>
+          </article>
+          <article class="panel forecast-panel">
+            <div class="panel-header"><div><h2>Month-end forecast</h2><p id="forecast-period">Estimated net for this month</p></div><span class="soft-tag">ESTIMATE</span></div>
+            <div class="forecast-value" id="forecast-balance">$0.00</div>
+            <p class="forecast-caption" id="forecast-caption">Based on recorded transactions and upcoming recurring items.</p>
+            <div class="forecast-breakdown"><div><span>Recorded net</span><strong id="forecast-recorded">$0.00</strong></div><div><span>Scheduled net remaining</span><strong id="forecast-scheduled">$0.00</strong></div></div>
+            <p class="forecast-disclaimer">This is a planning estimate, not your live bank balance. One-time future expenses and unrecorded activity are not included.</p>
+          </article>
+        </div>
+
         <article class="panel transactions-panel">
           <div class="panel-header"><div><h2>Recent transactions</h2><p>Your latest money moves</p></div><button class="text-button" data-view-link="transactions">View all →</button></div>
           <div class="table-scroll"><table><thead><tr><th>TRANSACTION</th><th>CATEGORY</th><th>DATE</th><th>AMOUNT</th></tr></thead><tbody id="recent-rows"></tbody></table></div>
@@ -167,11 +182,12 @@
 
       <section class="view" id="view-backup">
         <div class="section-toolbar"><div><h2>Backup & restore</h2><p>Keep a portable copy of your MoneyMap data.</p></div></div>
+        <article class="panel auto-backup-panel"><div class="backup-icon">⟳</div><h2>Automatic local backups</h2><p class="backup-copy">MoneyMap keeps up to 10 recent versions of your data in this browser whenever your saved data changes. These backups stay on this device and are not a substitute for downloading a backup file.</p><p id="auto-backup-status" class="muted" aria-live="polite">Checking automatic backup status…</p></article>
         <div class="backup-grid">
           <article class="panel"><div class="backup-icon">⇩</div><h2>Export a full backup</h2><p class="backup-copy">Download your transactions, budgets, recurring schedules, savings goals, and theme settings as a JSON file.</p><button class="primary-button" id="export-backup">↓ Download backup</button></article>
           <article class="panel"><div class="backup-icon">⇧</div><h2>Restore from backup</h2><p class="backup-copy">Import a MoneyMap JSON backup. Restoring replaces the data currently saved in this browser.</p><label class="backup-file-label" for="backup-file">Choose backup file</label><input id="backup-file" type="file" accept="application/json,.json"><button class="outline-button" id="import-backup" disabled>Restore selected backup</button><p class="backup-warning">Important: export a fresh backup first. Restoring overwrites the current MoneyMap data.</p></article>
         </div>
-        <article class="panel"><h2>Before you restore</h2><ul class="backup-checklist"><li>Use a JSON file exported by MoneyMap.</li><li>Check that it contains the data you expect.</li><li>Confirm the replacement when prompted.</li><li>Keep backup files somewhere safe; they may contain sensitive financial details.</li></ul></article>
+        <article class="panel"><h2>Before you restore</h2><ul class="backup-checklist"><li>Use a JSON file exported by MoneyMap.</li><li>Check that it contains the data you expect.</li><li>Confirm the replacement when prompted; MoneyMap downloads a safety copy first.</li><li>Keep backup files somewhere safe; they may contain sensitive financial details.</li></ul></article>
       </section>
 
       <section class="view" id="view-goals">

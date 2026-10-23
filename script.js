@@ -1,5 +1,6 @@
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
+const AUTO_BACKUP_KEY = "moneymap_v2_auto_backups";
 const STORAGE = {
   transactions: "moneymap_v2_transactions",
   budgets: "moneymap_v2_budgets",
@@ -33,7 +34,32 @@ const CLOUD_CONFIG = window.MONEYMAP_SUPABASE_CONFIG || {};
 const cloudConfigured = Boolean(CLOUD_CONFIG.url && CLOUD_CONFIG.anonKey && !String(CLOUD_CONFIG.url).includes("YOUR_PROJECT") && !String(CLOUD_CONFIG.anonKey).includes("YOUR_SUPABASE"));
 function save(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
+  createAutomaticBackup();
   if (cloudReady && cloudUser && !cloudHydrating) scheduleCloudSave();
+}
+function createAutomaticBackup() {
+  try {
+    if (typeof transactions === "undefined" || typeof budgets === "undefined" || typeof recurring === "undefined" || typeof goals === "undefined") return;
+    const data = { transactions, budgets, categoryBudgets, recurring, goals, theme: load(STORAGE.theme, "light") };
+    const fingerprint = JSON.stringify(data);
+    const history = load(AUTO_BACKUP_KEY, []);
+    if (history[0]?.fingerprint === fingerprint) return;
+    history.unshift({ savedAt: new Date().toISOString(), fingerprint, data });
+    localStorage.setItem(AUTO_BACKUP_KEY, JSON.stringify(history.slice(0, 10)));
+    updateAutoBackupStatus();
+  } catch (error) {
+    console.warn("MoneyMap automatic backup could not be saved", error);
+    const status = $("#auto-backup-status");
+    if (status) status.textContent = "Automatic backup unavailable — download a backup file to protect your data.";
+  }
+}
+function updateAutoBackupStatus() {
+  const status = $("#auto-backup-status");
+  if (!status) return;
+  const history = load(AUTO_BACKUP_KEY, []);
+  if (!history.length) { status.textContent = "Automatic backup will be created when your data changes."; return; }
+  const latest = new Date(history[0].savedAt);
+  status.textContent = `Automatic backup saved on ${latest.toLocaleDateString()} at ${latest.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}. Up to ${history.length} recent versions are kept on this device.`;
 }
 function currentPayload() {
   return { version: 1, transactions, budgets, categoryBudgets, recurring, goals, theme: load(STORAGE.theme, "light"), updatedAt: new Date().toISOString() };
@@ -241,7 +267,54 @@ function render() {
   $("#overall-budget-input").value=budgets.monthly;
   $("#greeting").textContent=`${new Date().getHours()<12?"Good morning":new Date().getHours()<18?"Good afternoon":"Good evening"} 👋`;
   $("#today-label").textContent=monthName(month).toUpperCase()+" FINANCIAL SNAPSHOT";
-  renderSpendingChart(list); renderMiniBudgets(list); renderRecent(list); populateTransactionCategoryFilter(); renderAllTransactions(); renderBudgetBreakdown(list); renderReports(); renderRecurring(); renderGoals();
+  renderSpendingChart(list); renderMiniBudgets(list); renderRecent(list); populateTransactionCategoryFilter(); renderAllTransactions(); renderBudgetBreakdown(list); renderReports(); renderRecurring(); renderGoals(); renderUpcomingPayments(); renderMonthEndForecast();
+}
+
+function renderUpcomingPayments() {
+  const today = localDate();
+  const horizon = new Date(); horizon.setHours(0,0,0,0); horizon.setDate(horizon.getDate()+30);
+  const endDate = localDate(horizon);
+  const items = recurring.filter(item => item.nextDate && item.nextDate >= today && item.nextDate <= endDate)
+    .sort((a,b) => a.nextDate.localeCompare(b.nextDate));
+  const list = $("#upcoming-payments");
+  list.innerHTML = items.slice(0,8).map(item => {
+    const isIncome = item.type === "income";
+    return `<div class="upcoming-row"><span class="upcoming-date"><strong>${new Date(item.nextDate+"T12:00:00").toLocaleDateString(undefined,{month:"short"})}</strong><small>${new Date(item.nextDate+"T12:00:00").getDate()}</small></span><div class="upcoming-details"><strong>${safe(item.description)}</strong><small>${safe(item.category || "Other")} · ${isIncome ? "Expected income" : item.type === "saving" ? "Savings" : "Payment"}</small></div><strong class="upcoming-amount ${isIncome ? "amount-positive" : ""}">${isIncome?"+":"−"}${money(item.amount)}</strong></div>`;
+  }).join("");
+  $("#upcoming-empty").classList.toggle("hidden", items.length > 0);
+  if (items.length > 8) list.insertAdjacentHTML("beforeend", `<p class="upcoming-more">And ${items.length-8} more scheduled items in the next 30 days.</p>`);
+}
+
+function renderMonthEndForecast() {
+  const now = new Date(); now.setHours(0,0,0,0);
+  const today = localDate(now);
+  const monthStart = `${today.slice(0,7)}-01`;
+  const monthEndDate = new Date(now.getFullYear(), now.getMonth()+1, 0);
+  const monthEnd = localDate(monthEndDate);
+  const thisMonth = transactions.filter(t => t.date >= monthStart && t.date <= monthEnd);
+  const recordedNet = sum(thisMonth,"income") - sum(thisMonth,"expense") - sum(thisMonth,"saving");
+  let scheduledNet = 0;
+  recurring.forEach(item => {
+    if (!item.nextDate || !item.frequency) return;
+    let date = item.nextDate;
+    const anchor = Number(item.anchorDay) || Number(date.slice(8,10));
+    let guard = 0;
+    while (date <= monthEnd && guard < 100) {
+      if (date > today) {
+        const alreadyRecorded = transactions.some(t => t.recurringId === item.id && t.recurringOccurrenceDate === date);
+        if (!alreadyRecorded) scheduledNet += (item.type === "income" ? 1 : -1) * Number(item.amount || 0);
+      }
+      date = advanceRecurringDate(date, item.frequency, anchor);
+      guard++;
+    }
+  });
+  const projected = recordedNet + scheduledNet;
+  $("#forecast-period").textContent = `Estimated net by ${monthEndDate.toLocaleDateString(undefined,{month:"short",day:"numeric"})}`;
+  $("#forecast-balance").textContent = money(projected);
+  $("#forecast-balance").classList.toggle("forecast-negative", projected < 0);
+  $("#forecast-recorded").textContent = money(recordedNet);
+  $("#forecast-scheduled").textContent = `${scheduledNet > 0 ? "+" : scheduledNet < 0 ? "−" : ""}${money(Math.abs(scheduledNet))}`;
+  $("#forecast-caption").textContent = scheduledNet === 0 ? "No unrecorded recurring items are scheduled for the rest of this month." : `${scheduledNet < 0 ? "Upcoming scheduled outflows reduce" : "Upcoming scheduled income increases"} your recorded net by ${money(Math.abs(scheduledNet))}.`;
 }
 
 function renderSpendingChart(list) {
@@ -279,12 +352,13 @@ function getFilteredTransactions() {
   const from=$("#transaction-date-from").value;
   const to=$("#transaction-date-to").value;
   const sort=$("#transaction-sort").value;
+  if(from && to && from > to) return [];
   const filtered=transactions.filter(t=>{
     const searchable=`${t.description||""} ${t.category||""}`.toLocaleLowerCase();
     if(query&&!searchable.includes(query)) return false;
     if(type!=="all"&&(t.type||"expense")!==type) return false;
     if(category!=="all"&&t.category!==category) return false;
-    if(period==="month"&&!t.date?.startsWith(selectedMonth())) return false;
+    if(period==="month"&&!from&&!to&&!t.date?.startsWith(selectedMonth())) return false;
     if(from&&(!t.date||t.date<from)) return false;
     if(to&&(!t.date||t.date>to)) return false;
     return true;
@@ -612,10 +686,13 @@ function downloadJSON(data, filename) {
   const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-function exportBackup() {
-  const backup = {format:"MoneyMap backup", version:1, exportedAt:new Date().toISOString(), data:{
+function buildBackup() {
+  return {format:"MoneyMap backup", version:1, exportedAt:new Date().toISOString(), data:{
     transactions, budgets, categoryBudgets, recurring, goals, theme:load(STORAGE.theme,"light")
   }};
+}
+function exportBackup() {
+  const backup = buildBackup();
   downloadJSON(backup, `moneymap-backup-${localDate()}.json`);
   notify("Full backup downloaded.");
 }
@@ -635,13 +712,14 @@ async function importBackup() {
   let parsed;
   try { parsed=JSON.parse(await file.text()); } catch { notify("That file isn't valid JSON."); return; }
   if (!validBackup(parsed)) { notify("This doesn't look like a valid MoneyMap backup."); return; }
-  if (!confirm("Restore this backup? This will replace the transactions, budgets, recurring items, savings goals, and theme currently stored in this browser.")) return;
+  if (!confirm("Restore this backup? MoneyMap will first download a safety copy of your current data. The selected backup will then replace the data currently stored in this browser.")) return;
   try {
+    downloadJSON(buildBackup(), `moneymap-safety-before-restore-${localDate()}.json`);
     const d=parsed.data;
     transactions=d.transactions; budgets=d.budgets; categoryBudgets=d.categoryBudgets; recurring=d.recurring; goals=d.goals;
     save(STORAGE.transactions,transactions); save(STORAGE.budgets,budgets); save(STORAGE.categoryBudgets,categoryBudgets); save(STORAGE.recurring,recurring); save(STORAGE.goals,goals);
     const theme=d.theme === "dark" ? "dark" : "light"; save(STORAGE.theme,theme); document.body.classList.toggle("dark",theme === "dark");
-    render(); input.value=""; $("#import-backup").disabled=true; notify("Backup restored successfully.");
+    render(); updateAutoBackupStatus(); input.value=""; $("#import-backup").disabled=true; notify("Backup restored. A safety copy of the previous data was downloaded.");
   } catch (error) { console.error(error); notify("Restore failed. Check browser storage and try again."); }
 }
 
@@ -718,7 +796,11 @@ $("#goal-form").addEventListener("submit",addGoal);
 $("#month-picker").addEventListener("change",()=>{render();});
 $("#report-period").addEventListener("change",()=>renderReports());
 $("#transaction-search").addEventListener("input",renderAllTransactions);
-["#type-filter","#category-filter","#transaction-period-filter","#transaction-date-from","#transaction-date-to","#transaction-sort"].forEach(selector=>$(selector).addEventListener("change",renderAllTransactions));
+["#type-filter","#category-filter","#transaction-period-filter","#transaction-sort"].forEach(selector=>$(selector).addEventListener("change",renderAllTransactions));
+["#transaction-date-from","#transaction-date-to"].forEach(selector=>$(selector).addEventListener("change",()=>{
+  if($("#transaction-date-from").value || $("#transaction-date-to").value) $("#transaction-period-filter").value="all";
+  renderAllTransactions();
+}));
 $("#reset-transaction-filters").addEventListener("click",resetTransactionFilters);
 $("#export-csv").addEventListener("click",exportCSV);
 $("#export-report").addEventListener("click",exportReportCSV);
@@ -731,6 +813,7 @@ document.addEventListener("submit",event=>{const goalForm=event.target.closest("
 document.addEventListener("click",event=>{const goalDelete=event.target.closest("[data-delete-goal]");if(goalDelete){deleteGoal(goalDelete.dataset.deleteGoal);return;}const edit=event.target.closest("[data-edit]");if(edit){editTransaction(edit.dataset.edit);return;}const del=event.target.closest("[data-delete]");if(del)deleteTransaction(del.dataset.delete);const rec=event.target.closest("[data-delete-recurring]");if(rec)deleteRecurring(rec.dataset.deleteRecurring);});
 $("#theme-toggle").addEventListener("click",()=>{document.body.classList.toggle("dark");save(STORAGE.theme,document.body.classList.contains("dark")?"dark":"light");});
 if(load(STORAGE.theme,"light")==="dark")document.body.classList.add("dark");
+updateAutoBackupStatus();
 const autoCreatedCount = processDueRecurringItems();
 render();
 if (autoCreatedCount > 0) notify(`${autoCreatedCount} due recurring transaction${autoCreatedCount === 1 ? "" : "s"} added.`);

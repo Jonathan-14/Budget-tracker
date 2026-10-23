@@ -1923,3 +1923,134 @@ body.dark .transaction-date-filters select {
     gap: 5px;
   }
 }
+
+/* Final features: upcoming recurring payments and month-end estimate */
+.forecast-grid {
+  grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+  margin-top: 17px;
+}
+.upcoming-list {
+  display: grid;
+  gap: 0;
+  margin-top: 14px;
+}
+.upcoming-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.upcoming-row:last-child {
+  border-bottom: 0;
+}
+.upcoming-date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 42px;
+  min-height: 45px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--green);
+  padding: 5px;
+}
+.upcoming-date strong {
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.upcoming-date small {
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.upcoming-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.upcoming-details strong {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.upcoming-details small {
+  font-size: 10px;
+  color: var(--muted);
+}
+.upcoming-amount {
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text);
+}
+.upcoming-amount.amount-positive {
+  color: var(--green);
+}
+.upcoming-more {
+  font-size: 10px;
+  color: var(--muted);
+  padding-top: 9px;
+}
+.forecast-value {
+  font-family: Manrope, sans-serif;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -1.5px;
+  margin: 25px 0 5px;
+  color: var(--green);
+  overflow-wrap: anywhere;
+}
+.forecast-value.forecast-negative {
+  color: var(--coral);
+}
+.forecast-caption {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.6;
+  min-height: 34px;
+}
+.forecast-breakdown {
+  display: grid;
+  gap: 12px;
+  margin-top: 22px;
+  padding-top: 17px;
+  border-top: 1px solid var(--line);
+}
+.forecast-breakdown > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+}
+.forecast-breakdown span {
+  color: var(--muted);
+}
+.forecast-breakdown strong {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.forecast-disclaimer {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin-top: 18px;
+  padding: 10px 12px;
+  background: var(--surface-soft);
+  border-radius: 9px;
+}
+.dark .upcoming-date {
+  background: var(--surface-soft);
+}
+@media (max-width: 1150px) {
+  .forecast-grid {
+    grid-template-columns: 1fr;
+  }
+}
