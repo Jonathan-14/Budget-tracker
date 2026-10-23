@@ -24,15 +24,3 @@
 
 ## Savings goals
 The Savings goals section lets you create named goals with a target amount, an optional target date, and an optional starting balance. Use the contribution field on a goal card to add progress; totals and progress bars update automatically. Goals are stored in this browser's local storage, alongside the rest of the app's local data. Deleting a goal removes only the goal tracker; it does not delete or create a transaction.
-
-
-## Backup and restore
-
-Open **Backup & restore** in the sidebar to download a full JSON backup of transactions, overall and category budgets, recurring items, savings goals, and theme settings. To restore, choose a JSON backup exported by MoneyMap and click **Restore selected backup**. The app validates the file and asks for confirmation before replacing current browser data. Keep backup files secure because they may contain personal financial information.
-
-Backups are manual; export them regularly and before restoring. This is a browser-based app and does not automatically sync data between devices.
-
-
-## Private cloud sync reliability
-
-The cloud-sync build includes a sync status indicator and optimistic concurrency protection. Run `supabase-sync-reliability.sql` in your existing Supabase project before using this updated build. It adds a revision counter and an atomic save function without deleting your current cloud payload. If another device has saved a newer snapshot, MoneyMap pauses syncing instead of silently overwriting it. Export a backup before choosing to reload the latest cloud version. This detects conflicts; it does not automatically merge simultaneous edits.

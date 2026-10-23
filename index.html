@@ -38,8 +38,9 @@
   </section>
   <div id="cloud-sync-status" class="cloud-sync-status hidden" role="status" aria-live="polite">Cloud sync ready</div>
   <div class="app-shell">
-    <aside class="sidebar">
-      <a class="brand" href="#" aria-label="MoneyMap home">
+    <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="Close navigation menu"></button>
+    <aside class="sidebar" id="app-sidebar" aria-label="Main navigation">
+      <a class="brand" href="#" data-view-link="overview" aria-label="MoneyMap home">
         <span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5 9 11l3.2 3.2L20 6.5"/><path d="M14.5 6.5H20v5.5"/></svg></span>
         <span>money<span class="brand-light">map</span></span>
       </a>
@@ -69,7 +70,8 @@
 
     <main class="main">
       <header class="topbar">
-        <div class="mobile-brand"><span class="brand-mark">↗</span> moneymap</div>
+        <button class="mobile-menu-toggle" id="mobile-menu-toggle" type="button" aria-label="Open navigation menu" aria-controls="app-sidebar" aria-expanded="false">☰</button>
+        <button class="mobile-brand" id="mobile-home" type="button" aria-label="Go to MoneyMap overview"><span class="brand-mark">↗</span> moneymap</button>
         <div class="breadcrumb">Workspace <span>/</span> <strong id="page-name">Overview</strong></div>
         <div class="top-actions">
           <label class="month-picker"><span>Period</span><input type="month" id="month-picker"></label>
@@ -140,7 +142,7 @@
       </section>
 
       <section class="view" id="view-budgets">
-        <div class="section-toolbar"><div><h2>Budget planner</h2><p>Give every dollar a purpose.</p></div></div>
+        <div class="section-toolbar"><div><h2>Budget planner</h2><p>Give every dollar a purpose.</p></div><button class="outline-button" type="button" data-view-link="overview">← Back to overview</button></div>
         <div class="budget-page-grid">
           <article class="panel"><div class="panel-header"><div><h2>Monthly spending limit</h2><p>Your overall monthly target</p></div></div><form id="overall-budget-form" class="inline-form"><label for="overall-budget-input">Budget amount ($)</label><div class="inline-input"><input id="overall-budget-input" type="number" min="0" step="0.01" required><button class="primary-button">Save budget</button></div></form></article>
           <article class="panel"><div class="panel-header"><div><h2>Category budgets</h2><p>Set limits for your biggest spending areas</p></div></div><form id="category-budget-form" class="stack-form"><label>Category<select id="budget-category"><option>Food & dining</option><option>Housing</option><option>Transportation</option><option>Shopping</option><option>Bills & utilities</option><option>Health</option><option>Entertainment</option><option>Other</option></select></label><label>Monthly limit ($)<input id="category-budget-input" type="number" min="0" step="0.01" required placeholder="e.g. 350"></label><button class="primary-button">Add / update category</button></form></article>
