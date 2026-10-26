@@ -256,6 +256,8 @@ function render() {
   $("#stat-expenses").textContent=money(expenses);
   $("#stat-savings").textContent=income ? `${Math.round((savings/income)*100)}%` : "0%";
   $("#spend-month-label").textContent=monthName(month);
+  $("#spending-overview-subtitle").textContent=`Where your money went in ${monthName(month)}`;
+  $("#home-budget-subtitle").textContent=`Actual ${monthName(month)} spending compared with your monthly limits`;
   $("#chart-total").textContent=money(expenses);
   $("#budget-limit-display").textContent=money(budgets.monthly);
   $("#budget-used").textContent=money(expenses);
@@ -268,6 +270,8 @@ function render() {
   $("#greeting").textContent=`${new Date().getHours()<12?"Good morning":new Date().getHours()<18?"Good afternoon":"Good evening"} 👋`;
   $("#today-label").textContent=monthName(month).toUpperCase()+" FINANCIAL SNAPSHOT";
   renderSpendingChart(list); renderMiniBudgets(list); renderRecent(list); populateTransactionCategoryFilter(); renderAllTransactions(); renderBudgetBreakdown(list); renderReports(); renderRecurring(); renderGoals(); renderUpcomingPayments(); renderMonthEndForecast();
+  // Charts can be measured while their view is hidden; resize after the selected month has rendered.
+  requestAnimationFrame(() => { spendingChart?.resize(); if (monthlyChart) monthlyChart.resize(); });
 }
 
 function renderUpcomingPayments() {
@@ -279,7 +283,9 @@ function renderUpcomingPayments() {
   const list = $("#upcoming-payments");
   list.innerHTML = items.slice(0,8).map(item => {
     const isIncome = item.type === "income";
-    return `<div class="upcoming-row"><span class="upcoming-date"><strong>${new Date(item.nextDate+"T12:00:00").toLocaleDateString(undefined,{month:"short"})}</strong><small>${new Date(item.nextDate+"T12:00:00").getDate()}</small></span><div class="upcoming-details"><strong>${safe(item.description)}</strong><small>${safe(item.category || "Other")} · ${isIncome ? "Expected income" : item.type === "saving" ? "Savings" : "Payment"}</small></div><strong class="upcoming-amount ${isIncome ? "amount-positive" : ""}">${isIncome?"+":"−"}${money(item.amount)}</strong></div>`;
+    const isBill = item.type !== "income" && item.type !== "saving";
+    const paid = item.paymentStatus === "paid" && item.paymentStatusDate === item.nextDate;
+    return `<div class="upcoming-row"><span class="upcoming-date"><strong>${new Date(item.nextDate+"T12:00:00").toLocaleDateString(undefined,{month:"short"})}</strong><small>${new Date(item.nextDate+"T12:00:00").getDate()}</small></span><div class="upcoming-details"><strong>${safe(item.description)}</strong><small>${safe(item.category || "Other")} · ${isIncome ? "Expected income" : item.type === "saving" ? "Savings" : "Bill"}${isBill ? ` · <span class="payment-status ${paid ? "is-paid" : "is-pending"}">${paid ? "Paid" : "Not marked paid"}</span>` : ""}</small></div><div class="upcoming-actions"><strong class="upcoming-amount ${isIncome ? "amount-positive" : ""}">${isIncome?"+":"−"}${money(item.amount)}</strong>${isBill ? (paid ? `<span class="payment-paid-label">✓ Paid</span>` : `<button class="payment-action" data-mark-paid="${safe(item.id)}" type="button">Mark paid</button>`) : ""}</div></div>`;
   }).join("");
   $("#upcoming-empty").classList.toggle("hidden", items.length > 0);
   if (items.length > 8) list.insertAdjacentHTML("beforeend", `<p class="upcoming-more">And ${items.length-8} more scheduled items in the next 30 days.</p>`);
@@ -302,7 +308,8 @@ function renderMonthEndForecast() {
     while (date <= monthEnd && guard < 100) {
       if (date > today) {
         const alreadyRecorded = transactions.some(t => t.recurringId === item.id && t.recurringOccurrenceDate === date);
-        if (!alreadyRecorded) scheduledNet += (item.type === "income" ? 1 : -1) * Number(item.amount || 0);
+        const markedPaid = item.type !== "income" && item.type !== "saving" && item.paymentStatus === "paid" && item.paymentStatusDate === date;
+        if (!alreadyRecorded && !markedPaid) scheduledNet += (item.type === "income" ? 1 : -1) * Number(item.amount || 0);
       }
       date = advanceRecurringDate(date, item.frequency, anchor);
       guard++;
@@ -442,6 +449,18 @@ function renderFinancialInsights(list, yearly, year, month, totals, categoryData
     if (top && expenses > 0) {
       addInsight("neutral", "Biggest spending category", `${top[0]} accounts for ${Math.round((top[1] / expenses) * 100)}% of your expenses (${money(top[1])}).`);
     }
+    const previousCategorySpend = getSpending(previousList);
+    const categoryChanges = Object.entries(categoryData).map(([name, amount]) => {
+      const previous = Number(previousCategorySpend[name] || 0);
+      return { name, amount, previous, change: previous > 0 ? ((amount - previous) / previous) * 100 : (amount > 0 ? 100 : 0) };
+    }).filter(item => item.amount >= 25 && ((item.previous > 0 && item.amount - item.previous >= 25 && item.change >= 20) || (item.previous === 0 && item.amount >= 75)))
+      .sort((a, b) => (b.amount - b.previous) - (a.amount - a.previous));
+    if (categoryChanges.length) {
+      const trend = categoryChanges[0];
+      addInsight("warning", `${trend.name} spending is rising`, trend.previous > 0
+        ? `You spent ${money(trend.amount - trend.previous)} more in ${trend.name} than ${previousLabel} (${Math.round(trend.change)}% higher). Consider reviewing recent purchases in this category.`
+        : `You recorded ${money(trend.amount)} in ${trend.name} this period, compared with no recorded spending in ${previousLabel}. Check whether this is a one-off expense or a new pattern.`);
+    }
     if (income > 0) {
       const rate = Math.round((savings / income) * 100);
       addInsight(rate >= 20 ? "positive" : rate > 0 ? "neutral" : "warning", "Savings rate", `${rate}% of recorded income was marked as savings in ${periodLabel}.`);
@@ -525,8 +544,52 @@ function renderReports() {
   monthlyChart=new Chart($("#monthly-chart").getContext("2d"),{type:"bar",data:{labels,datasets:[{label:"Income",data:incomes,backgroundColor:"#16845a",borderRadius:5,barPercentage:.55},{label:"Expenses",data:outgoings,backgroundColor:"#f0a092",borderRadius:5,barPercentage:.55}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{usePointStyle:true,boxWidth:7,boxHeight:7,padding:22,font:{family:"DM Sans",size:11}}}},scales:{x:{grid:{display:false},ticks:{color:"#8b9690",font:{family:"DM Sans",size:10}},border:{display:false}},y:{beginAtZero:true,grid:{color:"#eef2ef"},ticks:{color:"#8b9690",font:{family:"DM Sans",size:10},callback:v=>"$"+v.toLocaleString()},border:{display:false}}}}});
 }
 function renderRecurring() {
-  $("#recurring-list").innerHTML=recurring.map(r=>`<div class="recurring-row"><span class="transaction-symbol">${iconFor(r.category)}</span><div><strong>${safe(r.description)}</strong><small>${safe(r.category)} · ${safe(r.frequency)} · Next ${prettyDate(r.nextDate)}</small></div><div class="recurring-amount">${r.type==="income"?"+":"−"}${money(r.amount)}<small>${safe(r.type)}</small></div><button class="delete-button" data-delete-recurring="${safe(r.id)}" aria-label="Delete recurring item">×</button></div>`).join("");
-  $("#recurring-empty").classList.toggle("hidden",recurring.length>0);
+  const typeFilter = $("#recurring-type-filter")?.value || "all";
+  const statusFilter = $("#recurring-status-filter")?.value || "all";
+  const sort = $("#recurring-sort")?.value || "date-asc";
+  const filtered = recurring.filter(r => {
+    if (typeFilter !== "all" && (r.type || "expense") !== typeFilter) return false;
+    const isBill = (r.type || "expense") !== "income" && (r.type || "expense") !== "saving";
+    const paid = isBill && r.paymentStatus === "paid" && r.paymentStatusDate === r.nextDate;
+    if (statusFilter === "paid" && !paid) return false;
+    if (statusFilter === "pending" && (!isBill || paid)) return false;
+    return true;
+  }).sort((a,b) => {
+    if (sort === "date-desc") return String(b.nextDate||"").localeCompare(String(a.nextDate||""));
+    if (sort === "name-asc") return String(a.description||"").localeCompare(String(b.description||""));
+    if (sort === "name-desc") return String(b.description||"").localeCompare(String(a.description||""));
+    if (sort === "amount-desc") return Number(b.amount||0)-Number(a.amount||0);
+    if (sort === "amount-asc") return Number(a.amount||0)-Number(b.amount||0);
+    if (sort === "frequency") return String(a.frequency||"").localeCompare(String(b.frequency||""));
+    return String(a.nextDate||"").localeCompare(String(b.nextDate||""));
+  });
+  $("#recurring-list").innerHTML=filtered.map(r=>{
+    const isBill = r.type !== "income" && r.type !== "saving";
+    const paid = r.paymentStatus === "paid" && r.paymentStatusDate === r.nextDate;
+    const frequencyLabels = {weekly:"Weekly",biweekly:"Biweekly",monthly:"Monthly",yearly:"Yearly"};
+    return `<div class="recurring-row"><span class="transaction-symbol">${iconFor(r.category)}</span><div class="recurring-item-details"><strong>${safe(r.description)}</strong><small>${safe(r.category)} · ${frequencyLabels[r.frequency] || safe(r.frequency)} · Next ${prettyDate(r.nextDate)}${isBill ? ` · <span class="payment-status ${paid ? "is-paid" : "is-pending"}">${paid ? "Paid for this due date" : "Payment not marked paid"}</span>` : ""}</small></div><div class="recurring-amount">${r.type==="income"?"+":"−"}${money(r.amount)}<small>${safe(r.type)}</small></div>${isBill && !paid ? `<button class="payment-action" data-mark-paid="${safe(r.id)}" type="button">Mark paid</button>` : ""}<button class="delete-button" data-delete-recurring="${safe(r.id)}" aria-label="Delete recurring item">×</button></div>`;
+  }).join("");
+  $("#recurring-empty").classList.toggle("hidden",filtered.length>0);
+  $("#recurring-empty").textContent = recurring.length ? "No recurring items match these filters." : "No recurring items yet. Add rent, subscriptions, or a regular paycheck.";
+}
+function markRecurringPaid(id) {
+  const item = recurring.find(entry => entry.id === id);
+  if (!item || item.type === "income" || item.type === "saving" || !item.nextDate) return;
+  const occurrenceDate = item.nextDate;
+  if (item.paymentStatus === "paid" && item.paymentStatusDate === occurrenceDate) return;
+  item.paymentStatus = "paid";
+  item.paymentStatusDate = occurrenceDate;
+  const alreadyRecorded = transactions.some(t => t.recurringId === item.id && t.recurringOccurrenceDate === occurrenceDate);
+  if (!alreadyRecorded) {
+    transactions.push({ id: crypto.randomUUID(), description: item.description,
+      amount: Math.round(Number(item.amount || 0) * 100) / 100, type: item.type || "expense",
+      category: item.category || "Bills & utilities", date: localDate(), recurring: true,
+      recurringId: item.id, recurringOccurrenceDate: occurrenceDate, paymentStatusEntry: true });
+    save(STORAGE.transactions, transactions);
+  }
+  save(STORAGE.recurring, recurring);
+  render();
+  notify(`${item.description} marked as paid.`);
 }
 
 function renderGoals() {
@@ -619,8 +682,8 @@ function addTransaction(event) {
 function nextMonthDate(dateStr){const [y,m,d]=dateStr.split("-").map(Number), target=new Date(y,m,Math.min(d,new Date(y,m+1,0).getDate()));return localDate(target);}
 function advanceRecurringDate(dateStr, frequency, anchorDay) {
   const [year, month, day] = dateStr.split("-").map(Number);
-  if (frequency === "weekly") {
-    const next = new Date(year, month - 1, day + 7);
+  if (frequency === "weekly" || frequency === "biweekly") {
+    const next = new Date(year, month - 1, day + (frequency === "biweekly" ? 14 : 7));
     return localDate(next);
   }
   if (frequency === "yearly") {
@@ -792,8 +855,26 @@ $("#open-recurring").addEventListener("click",()=>openDialog("recurring-dialog")
 $$("[data-close]").forEach(button=>button.addEventListener("click",()=>closeDialog(button.dataset.close)));
 $("#transaction-form").addEventListener("submit",addTransaction);
 $("#recurring-form").addEventListener("submit",addRecurring);
+["#recurring-type-filter", "#recurring-status-filter", "#recurring-sort"].forEach(selector => $(selector)?.addEventListener("change", renderRecurring));
+$("#reset-recurring-filters")?.addEventListener("click", () => {
+  $("#recurring-type-filter").value = "all";
+  $("#recurring-status-filter").value = "all";
+  $("#recurring-sort").value = "date-asc";
+  renderRecurring();
+});
 $("#goal-form").addEventListener("submit",addGoal);
-$("#month-picker").addEventListener("change",()=>{render();});
+$("#month-picker").addEventListener("change",()=>{
+  const chosen = $("#month-picker").value;
+  if (!/^\d{4}-\d{2}$/.test(chosen)) return;
+  render();
+  // Keep overview chart and all month-sensitive budget totals in sync with the newly selected month.
+  const monthList = monthTransactions(chosen);
+  const expenseTotal = sum(monthList, "expense");
+  $("#chart-total").textContent = money(expenseTotal);
+  renderSpendingChart(monthList);
+  renderMiniBudgets(monthList);
+  renderBudgetBreakdown(monthList);
+});
 $("#report-period").addEventListener("change",()=>renderReports());
 $("#transaction-search").addEventListener("input",renderAllTransactions);
 ["#type-filter","#category-filter","#transaction-period-filter","#transaction-sort"].forEach(selector=>$(selector).addEventListener("change",renderAllTransactions));
@@ -810,7 +891,7 @@ $("#import-backup").addEventListener("click",importBackup);
 $("#overall-budget-form").addEventListener("submit",event=>{event.preventDefault();const amount=Number($("#overall-budget-input").value);if(!Number.isFinite(amount)||amount<0){notify("Enter a valid budget.");return;}budgets.monthly=Math.round(amount*100)/100;save(STORAGE.budgets,budgets);render();notify("Monthly budget updated.");});
 $("#category-budget-form").addEventListener("submit",event=>{event.preventDefault();const name=$("#budget-category").value,amount=Number($("#category-budget-input").value);if(!Number.isFinite(amount)||amount<=0){notify("Enter a category budget greater than zero.");return;}categoryBudgets[name]=Math.round(amount*100)/100;save(STORAGE.categoryBudgets,categoryBudgets);$("#category-budget-input").value="";render();notify(`${name} budget saved.`);});
 document.addEventListener("submit",event=>{const goalForm=event.target.closest("[data-goal-form]");if(goalForm){event.preventDefault();contributeToGoal(goalForm);}});
-document.addEventListener("click",event=>{const goalDelete=event.target.closest("[data-delete-goal]");if(goalDelete){deleteGoal(goalDelete.dataset.deleteGoal);return;}const edit=event.target.closest("[data-edit]");if(edit){editTransaction(edit.dataset.edit);return;}const del=event.target.closest("[data-delete]");if(del)deleteTransaction(del.dataset.delete);const rec=event.target.closest("[data-delete-recurring]");if(rec)deleteRecurring(rec.dataset.deleteRecurring);});
+document.addEventListener("click",event=>{const paid=event.target.closest("[data-mark-paid]");if(paid){markRecurringPaid(paid.dataset.markPaid);return;}const goalDelete=event.target.closest("[data-delete-goal]");if(goalDelete){deleteGoal(goalDelete.dataset.deleteGoal);return;}const edit=event.target.closest("[data-edit]");if(edit){editTransaction(edit.dataset.edit);return;}const del=event.target.closest("[data-delete]");if(del)deleteTransaction(del.dataset.delete);const rec=event.target.closest("[data-delete-recurring]");if(rec)deleteRecurring(rec.dataset.deleteRecurring);});
 $("#theme-toggle").addEventListener("click",()=>{document.body.classList.toggle("dark");save(STORAGE.theme,document.body.classList.contains("dark")?"dark":"light");});
 if(load(STORAGE.theme,"light")==="dark")document.body.classList.add("dark");
 updateAutoBackupStatus();

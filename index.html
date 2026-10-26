@@ -113,12 +113,12 @@
 
         <div class="dashboard-grid">
           <article class="panel spending-panel">
-            <div class="panel-header"><div><h2>Spending overview</h2><p>Where your money went this month</p></div><span class="soft-tag" id="spend-month-label">This month</span></div>
+            <div class="panel-header"><div><h2>Spending overview</h2><p id="spending-overview-subtitle">Where your money went this month</p></div><span class="soft-tag" id="spend-month-label">This month</span></div>
             <div class="chart-wrap"><canvas id="spending-chart" aria-label="Spending by category chart"></canvas><div class="chart-center"><span>Total spent</span><strong id="chart-total">$0</strong></div></div>
             <div id="category-legend" class="category-legend"></div>
           </article>
           <article class="panel budget-panel">
-            <div class="panel-header"><div><h2>Monthly budget</h2><p>Stay on track with your goals</p></div><button class="text-button" data-view-link="budgets">Manage ↗</button></div>
+            <div class="panel-header"><div><h2>Monthly budget</h2><p id="home-budget-subtitle">Monthly limits compared with the selected month</p></div><button class="text-button" data-view-link="budgets">Manage ↗</button></div>
             <div class="budget-total"><strong id="budget-used">$0</strong><span>of <span id="budget-limit-display">$2,500</span></span></div>
             <div class="progress-track"><div class="progress-fill" id="overall-progress"></div></div>
             <div class="budget-meta"><span id="budget-percent">0% used</span><span id="budget-left">$2,500 left</span></div>
@@ -177,7 +177,7 @@
 
       <section class="view" id="view-recurring">
         <div class="section-toolbar"><div><h2>Recurring payments</h2><p>Track subscriptions, bills, and regular income.</p></div><button class="primary-button" id="open-recurring">＋ Add recurring</button></div>
-        <article class="panel"><div class="panel-header"><div><h2>Your schedule</h2><p>Recurring items you've added</p></div></div><div id="recurring-list" class="recurring-list"></div><div id="recurring-empty" class="empty-state">No recurring items yet. Add rent, subscriptions, or a regular paycheck.</div></article>
+        <article class="panel"><div class="panel-header"><div><h2>Your schedule</h2><p>Recurring items you've added</p></div></div><div class="recurring-filters"><label>Show<select id="recurring-type-filter"><option value="all">All types</option><option value="expense">Bills & expenses</option><option value="income">Income</option><option value="saving">Savings</option></select></label><label>Payment status<select id="recurring-status-filter"><option value="all">All statuses</option><option value="pending">Not marked paid</option><option value="paid">Marked paid</option></select></label><label>Sort by<select id="recurring-sort"><option value="date-asc">Next due date (soonest)</option><option value="date-desc">Next due date (latest)</option><option value="name-asc">Name (A–Z)</option><option value="name-desc">Name (Z–A)</option><option value="amount-desc">Amount (highest)</option><option value="amount-asc">Amount (lowest)</option><option value="frequency">Frequency</option></select></label><button type="button" class="outline-button" id="reset-recurring-filters">Reset filters</button></div><div id="recurring-list" class="recurring-list"></div><div id="recurring-empty" class="empty-state">No recurring items yet. Add rent, subscriptions, or a regular paycheck.</div></article>
       </section>
 
       <section class="view" id="view-backup">
@@ -226,7 +226,7 @@
       <div class="modal-header"><div><p class="eyebrow">AUTOPILOT</p><h2>Add recurring item</h2><p>Keep regular bills and income on your radar.</p></div><button class="close-button" type="button" data-close="recurring-dialog" aria-label="Close">×</button></div>
       <label>Description<input id="recurring-description" required maxlength="80" placeholder="e.g. Rent or streaming service"></label>
       <div class="form-row"><label>Amount ($)<input id="recurring-amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></label><label>Type<select id="recurring-type"><option value="expense">Expense</option><option value="income">Income</option><option value="saving">Savings</option></select></label></div>
-      <div class="form-row"><label>Category<select id="recurring-category"><option>Housing</option><option>Bills & utilities</option><option>Food & dining</option><option>Transportation</option><option>Salary</option><option>Entertainment</option><option>Savings</option><option>Other</option></select></label><label>Frequency<select id="recurring-frequency"><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="yearly">Yearly</option></select></label></div>
+      <div class="form-row"><label>Category<select id="recurring-category"><option>Housing</option><option>Bills & utilities</option><option>Food & dining</option><option>Transportation</option><option>Salary</option><option>Entertainment</option><option>Savings</option><option>Other</option></select></label><label>Frequency<select id="recurring-frequency"><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="biweekly">Biweekly (every 2 weeks)</option><option value="yearly">Yearly</option></select></label></div>
       <label>Next due date<input id="recurring-date" type="date" required></label>
       <div class="modal-actions"><button class="outline-button" type="button" data-close="recurring-dialog">Cancel</button><button class="primary-button">Save recurring item</button></div>
     </form>
