@@ -235,6 +235,22 @@ async function initializeCloud() {
 }
 function localDate(date = new Date()) { const d = new Date(date); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function monthNow() { return localDate().slice(0,7); }
+function populateMonthPicker() {
+  const picker = $("#month-picker");
+  if (!picker) return;
+  const current = monthNow();
+  const currentYear = Number(current.slice(0,4));
+  const options = [];
+  // Native input[type=month] is inconsistent in some browsers, so use a regular select.
+  for (let year = currentYear - 10; year <= currentYear + 10; year++) {
+    for (let month = 1; month <= 12; month++) {
+      const value = `${year}-${String(month).padStart(2,"0")}`;
+      options.push(`<option value="${value}">${monthName(value)}</option>`);
+    }
+  }
+  picker.innerHTML = options.join("");
+  picker.value = current;
+}
 function selectedMonth() { return $("#month-picker").value || monthNow(); }
 function money(amount) { return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(amount)||0); }
 function monthTransactions(month = selectedMonth()) { return transactions.filter(t => t.date?.startsWith(month)); }
@@ -842,7 +858,7 @@ function toggleMobileNavigation() {
 window.toggleMobileNavigation = toggleMobileNavigation;
 window.closeMobileNavigation = closeMobileNavigation;
 
-$("#month-picker").value=monthNow();$("#date").value=localDate();$("#recurring-date").value=localDate();$("#year").textContent=new Date().getFullYear();
+populateMonthPicker();$("#date").value=localDate();$("#recurring-date").value=localDate();$("#year").textContent=new Date().getFullYear();
 $$(".nav-item").forEach(button=>button.addEventListener("click",()=>setView(button.dataset.view)));
 $$("[data-view-link]").forEach(button=>button.addEventListener("click",event=>{event.preventDefault();setView(button.dataset.viewLink);}));
 $("#mobile-menu-toggle")?.addEventListener("click",toggleMobileNavigation);
@@ -878,7 +894,19 @@ $("#month-picker").addEventListener("change",()=>{
 $("#report-period").addEventListener("change",()=>renderReports());
 $("#transaction-search").addEventListener("input",renderAllTransactions);
 ["#type-filter","#category-filter","#transaction-period-filter","#transaction-sort"].forEach(selector=>$(selector).addEventListener("change",renderAllTransactions));
+function isValidISODate(value) {
+  if (!value) return true;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00`);
+  return !Number.isNaN(date.getTime()) && localDate(date) === value;
+}
 ["#transaction-date-from","#transaction-date-to"].forEach(selector=>$(selector).addEventListener("change",()=>{
+  const input=$(selector);
+  if (!isValidISODate(input.value)) {
+    notify("Enter dates in YYYY-MM-DD format, for example 2025-04-30.");
+    input.focus();
+    return;
+  }
   if($("#transaction-date-from").value || $("#transaction-date-to").value) $("#transaction-period-filter").value="all";
   renderAllTransactions();
 }));
